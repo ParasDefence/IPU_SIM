@@ -53,6 +53,7 @@ Mainwindow::Mainwindow(QObject *parent) : QObject(parent) {
     QSettings setting("/home/paras/Projects/S2/IPUSim/Settings.ini", QSettings::IniFormat);
 
     ieuRecvPort = setting.value("IP/IEUPORT").toInt();
+    fusionRecvPort = setting.value("IP/FUSIONPORT").toInt();
     ieuIp = setting.value("IP/IEUIP").toString();
     sendBackPort = setting.value("IP/SENDPORT").toInt();
 
@@ -64,6 +65,13 @@ Mainwindow::Mainwindow(QObject *parent) : QObject(parent) {
         fflush(stdout);
     }
     connect(sock_ipuDataReceive, &QUdpSocket::readyRead, this, &Mainwindow::ieuDataReceived, Qt::DirectConnection);
+
+    sock_fusionDataReceive = new QUdpSocket(this);
+    if (!sock_fusionDataReceive->bind(QHostAddress::AnyIPv4, fusionRecvPort)) {
+        printf("CHARM: Binding Problem to fusionPort Error socket\n");
+        fflush(stdout);
+    }
+    connect(sock_fusionDataReceive, &QUdpSocket::readyRead, this, &Mainwindow::fusionDataReceived, Qt::DirectConnection);
 }
 
 void Mainwindow::ieuDataReceived() {
@@ -81,12 +89,27 @@ void Mainwindow::ieuDataReceived() {
 }
 
 
+void Mainwindow::fusionDataReceived() {
+    while (sock_fusionDataReceive->hasPendingDatagrams()) {
+        QByteArray fusionReceivedData;
+        fusionReceivedData.resize(sock_fusionDataReceive->pendingDatagramSize());
+        sock_fusionDataReceive->readDatagram(fusionReceivedData.data(), sock_fusionDataReceive->pendingDatagramSize());
+        QString str = QString(fusionReceivedData.toHex('-'));
+        qDebug() << "Fusion Data: " << str;
+        Q_UNUSED(str);
+
+        dataValidation(fusionReceivedData);
+
+    }
+}
+
+
 void Mainwindow::dataValidation(QByteArray ipuReceivedData)
 {
     RecvHeader header;
     memcpy(&header, ipuReceivedData.constData(), sizeof(RecvHeader));
 
-    qDebug() << "SSID" << QString::number(header.ssid, 16);
+//    qDebug() << "SSID" << QString::number(header.ssid, 16);
     PcktStatus statusPckt;
     statusPckt.header     = header.header;
     statusPckt.ssid       = header.ssid;
